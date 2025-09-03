@@ -40,7 +40,8 @@ target_link_libraries(urdf_to_screw_list_node
 install(TARGETS urdf_to_screw_list_node
   DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch
+install(
+  DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME})
 
 install(DIRECTORY include/

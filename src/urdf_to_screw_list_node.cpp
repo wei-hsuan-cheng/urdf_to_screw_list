@@ -123,6 +123,7 @@ public:
     this->declare_parameter<std::string>("output_format", "yaml"); // yaml|txt|cpp
     this->declare_parameter<bool>("use_body_frame", false);      // false = space S, true = body B
     this->declare_parameter<bool>("verbose", true);
+    this->declare_parameter<bool>("home_pose_as_pos_quat", true);
 
     run_once();
   }
@@ -135,6 +136,7 @@ private:
     const auto out_fmt         = this->get_parameter("output_format").as_string();
     const bool use_body        = this->get_parameter("use_body_frame").as_bool();
     const bool verbose         = this->get_parameter("verbose").as_bool();
+    const bool home_pose_as_pos_quat   = this->get_parameter("home_pose_as_pos_quat").as_bool();
 
     std::string urdf_xml = this->get_parameter("robot_description").as_string();
     if(urdf_xml.empty()){
@@ -173,44 +175,49 @@ private:
       RCLCPP_INFO(get_logger(), "Joint order: [%s]", names.c_str());
     }
 
-    // YAML-ish string
+    // YAML-ish string (emits M as position + quaternion xyzw)
     std::string out_text;
     {
       std::ostringstream y;
       y.setf(std::ios::fixed); y.precision(10);
-      y << "frame: " << frame_label << "\n";
+
+      // Add chain endpoints first
+      y << "base_link: " << base_link << "\n";
+      y << "ee_link: " << ee_link << "\n";
+      y << "screw_representation (space or body): " << frame_label << "\n";
       y << "joint_names: [";
+
       for(size_t i=0;i<space.joint_names.size();++i){
         y << space.joint_names[i];
         if(i+1<space.joint_names.size()) y << ", ";
       }
       y << "]\n";
+      y << "num_joints: " << n << "\n";
       y << "screw_list, S = [v; w] = [-w x q; w]:\n";
       for(int j=0;j<n;++j){
         Eigen::VectorXd col = S_or_B.col(j);
         y << "  - [" << col(0) << ", " << col(1) << ", " << col(2)
           << ", "   << col(3) << ", " << col(4) << ", " << col(5) << "]\n";
       }
-      y << "M:\n";
-      for(int r=0;r<4;++r){
-        y << "  - [" << M(r,0) << ", " << M(r,1) << ", " << M(r,2) << ", " << M(r,3) << "]\n";
+
+      if (home_pose_as_pos_quat) {
+        Eigen::Vector3d Mp;
+        Eigen::Vector4d Mq_wxyz;
+        uts::TToPosQuatWXYZ(M, Mp, Mq_wxyz);
+        y << "M_position: " << uts::vecToYamlList(Mp) << "\n";
+        y << "M_quaternion_wxyz: " << uts::vecToYamlList(Mq_wxyz) << "\n";
+      } else {
+        y << "M_matrix:\n";
+        for(int r=0;r<4;++r){
+          y << "  - [" << M(r,0) << ", " << M(r,1) << ", " << M(r,2) << ", " << M(r,3) << "]\n";
+        }
       }
+
       out_text = y.str();
     }
 
     RCLCPP_INFO(get_logger(), "\n%s", out_text.c_str());
 
-    // Optional: also emit a C++ initializer snippet
-    if(out_fmt == "cpp"){
-      std::ostringstream cpp;
-      cpp.setf(std::ios::fixed); cpp.precision(10);
-      cpp << "Eigen::MatrixXd S(6, " << n << ");\n";
-      cpp << "S << " << uts::matrixToInitializer(S_or_B) << ";\n\n";
-      cpp << "Eigen::Matrix4d M;\n";
-      cpp << "M << " << uts::matrixToInitializer(M) << ";\n";
-      RCLCPP_INFO(get_logger(), "C++ snippet:\n%s", cpp.str().c_str());
-      out_text = cpp.str();
-    }
 
     if(!output_path.empty()){
       std::ofstream ofs(output_path);

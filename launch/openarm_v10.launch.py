@@ -11,7 +11,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def screw_extractor_spawner(context: LaunchContext,
                             arm_type, ee_type, bimanual,
-                            base_link, ee_link, use_body_frame,
+                            base_link, ee_link, use_body_frame, home_pose_as_pos_quat,
                             output_path, output_format):
     arm_type_str = context.perform_substitution(arm_type)
     ee_type_str = context.perform_substitution(ee_type)
@@ -41,9 +41,10 @@ def screw_extractor_spawner(context: LaunchContext,
             "base_link": context.perform_substitution(base_link),
             "ee_link": context.perform_substitution(ee_link),
             "use_body_frame": ParameterValue(use_body_frame, value_type=bool),
+            "home_pose_as_pos_quat": ParameterValue(home_pose_as_pos_quat, value_type=bool),
             "output_path": context.perform_substitution(output_path),
             "output_format": context.perform_substitution(output_format),
-            "verbose": True
+            "verbose": True,
         }]
     )]
 
@@ -55,9 +56,10 @@ def generate_launch_description():
 
     base_link_arg   = DeclareLaunchArgument("base_link", default_value="openarm_link0")
     ee_link_arg     = DeclareLaunchArgument("ee_link", default_value="openarm_hand_tcp")
-    use_body_arg    = DeclareLaunchArgument("use_body_frame", default_value="false")
+    use_body_frame_arg    = DeclareLaunchArgument("use_body_frame", default_value="false")
+    home_pose_as_pos_quat_arg = DeclareLaunchArgument("home_pose_as_pos_quat", default_value="true")
     output_path_arg = DeclareLaunchArgument("output_path", default_value="")
-    output_fmt_arg  = DeclareLaunchArgument("output_format", default_value="yaml")  # yaml|txt|cpp
+    output_fmt_arg  = DeclareLaunchArgument("output_format", default_value="yaml")  # currently only supports yaml
 
     arm_type      = LaunchConfiguration("arm_type")
     ee_type       = LaunchConfiguration("ee_type")
@@ -65,17 +67,18 @@ def generate_launch_description():
     base_link     = LaunchConfiguration("base_link")
     ee_link       = LaunchConfiguration("ee_link")
     use_body_frame= LaunchConfiguration("use_body_frame")
+    home_pose_as_pos_quat = LaunchConfiguration("home_pose_as_pos_quat", default="true")
     output_path   = LaunchConfiguration("output_path")
     output_format = LaunchConfiguration("output_format")
 
     return LaunchDescription([
         arm_type_arg, ee_type_arg, bimanual_arg,
-        base_link_arg, ee_link_arg, use_body_arg,
+        base_link_arg, ee_link_arg, use_body_frame_arg, home_pose_as_pos_quat_arg,
         output_path_arg, output_fmt_arg,
         OpaqueFunction(
             function=screw_extractor_spawner,
             args=[arm_type, ee_type, bimanual,
-                  base_link, ee_link, use_body_frame,
+                  base_link, ee_link, use_body_frame, home_pose_as_pos_quat,
                   output_path, output_format]
         ),
     ])

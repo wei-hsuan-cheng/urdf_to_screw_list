@@ -93,7 +93,7 @@ static ScrewList make_space_screws_from_urdf_string(
         w.setZero();
       }
 
-      Eigen::Matrix<double,6,1> Si; Si << v, w;
+      Eigen::Matrix<double,6,1> Si; Si << v, w; // (linear on top, angular below)
       S.conservativeResize(6, S.cols()+1);
       S.col(S.cols()-1) = Si;
 

@@ -3,7 +3,7 @@
 A tiny ROS 2 utility that converts a URDF/Xacro robot model into a **Screw List** for PoEs-based robot kinematics. It parses the kinematic chain (base → end-effector) and outputs:
 
 - **`screw_list`**: arrays are twists in **$S = [v^T \omega^T]^T\in\mathbb{R}^6$** order (linear on top, angular below)
-- **`M`**: the end-effector home pose $^{\mathbf{base}}_{\mathbf{ee}}T$ at zero joint configuration  
+- **`M`**: the end-effector home pose $^{\mathbf{base}}\xi_{\mathbf{ee}}\in SE(3)$ at zero joint configuration  
 - Frame options: **space screws S** or **body screws B** (via `use_body_frame`)
 
 Inspired by *Modern Robotics* (PoEs method), built on `urdfdom` + `kdl_parser` + `Orocos-KDL`.

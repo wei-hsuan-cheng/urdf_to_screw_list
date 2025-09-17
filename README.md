@@ -70,7 +70,7 @@ colcon build --packages-select urdf_to_screw_list && . install/setup.bash
 ```bash
 ros2 launch urdf_to_screw_list openarm_v10.launch.py \
 arm_type:=v10 bimanual:=false \
-base_link:=openarm_link0 ee_link:=openarm_hand_tcp \
+base_link:=openarm_link0 ee_link:=openarm_hand \
 use_body_frame:=true \
 home_pose_as_pos_quat:=true \
 output_format:=yaml \

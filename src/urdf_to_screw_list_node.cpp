@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <kdl_parser/kdl_parser.hpp>
 #include <urdf_parser/urdf_parser.h>
+#include <urdf_model/model.h>
 #include <kdl/tree.hpp>
 #include <kdl/chain.hpp>
 #include <kdl/frames.hpp>
@@ -30,6 +31,46 @@ static Eigen::Matrix4d kdlFrameToEig(const KDL::Frame& F){
   T(0,3)=F.p.x(); T(1,3)=F.p.y(); T(2,3)=F.p.z();
   return T;
 }
+
+static std::string extractJointLimits(const urdf::ModelInterfaceSharedPtr& urdf_model,
+                                      const std::vector<std::string>& joint_names,
+                                      int precision = 10) {
+  std::ostringstream y;
+  y.setf(std::ios::fixed);
+  y.precision(precision);
+
+  y << "joint_limits:\n";
+  for (const auto& jname : joint_names) {
+    urdf::JointConstSharedPtr jp =
+        (urdf_model ? urdf_model->getJoint(jname) : urdf::JointConstSharedPtr());
+
+    if (jp) {
+      if (jp->type == urdf::Joint::CONTINUOUS) {
+        // continuous: no lower/upper; include vel/effort if available
+        y << "  " << jname << ": { type: continuous";
+        if (jp->limits) {
+          y << ", velocity: " << jp->limits->velocity
+            << ", effort: "   << jp->limits->effort;
+        }
+        y << " }\n";
+      } else if (jp->limits) {
+        // revolute/prismatic with limits
+        y << "  " << jname << ": { lower: "   << jp->limits->lower
+          << ", upper: "     << jp->limits->upper
+          << ", velocity: "  << jp->limits->velocity
+          << ", effort: "    << jp->limits->effort << " }\n";
+      } else {
+        // no limits available
+        y << "  " << jname << ": {}\n";
+      }
+    } else {
+      // joint not found in URDF
+      y << "  " << jname << ": {}\n";
+    }
+  }
+  return y.str();
+}
+
 
 static std::string readFileToString(const std::string& path){
   std::ifstream ifs(path);
@@ -175,47 +216,9 @@ private:
       RCLCPP_INFO(get_logger(), "Joint order: [%s]", names.c_str());
     }
 
-    // // YAML-ish string (emits M as position + quaternion xyzw)
-    // std::string out_text;
-    // {
-    //   std::ostringstream y;
-    //   y.setf(std::ios::fixed); y.precision(10);
-
-    //   // Add chain endpoints first
-    //   y << "base_link: " << base_link << "\n";
-    //   y << "ee_link: " << ee_link << "\n";
-    //   y << "screw_representation (space or body): " << frame_label << "\n";
-    //   y << "joint_names: [";
-
-    //   for(size_t i=0;i<space.joint_names.size();++i){
-    //     y << space.joint_names[i];
-    //     if(i+1<space.joint_names.size()) y << ", ";
-    //   }
-    //   y << "]\n";
-    //   y << "num_joints: " << n << "\n";
-    //   y << "screw_list: # S = [v; w] = [-w x q; w]\n";
-    //   for(int j=0;j<n;++j){
-    //     Eigen::VectorXd col = S_or_B.col(j);
-    //     y << "  - [" << col(0) << ", " << col(1) << ", " << col(2)
-    //       << ", "   << col(3) << ", " << col(4) << ", " << col(5) << "]\n";
-    //   }
-
-    //   if (home_pose_as_pos_quat) {
-    //     Eigen::Vector3d Mp;
-    //     Eigen::Vector4d Mq_wxyz;
-    //     uts::TToPosQuatWXYZ(M, Mp, Mq_wxyz);
-    //     y << "M_position: " << uts::vecToYamlList(Mp) << "\n";
-    //     y << "M_quaternion_wxyz: " << uts::vecToYamlList(Mq_wxyz) << "\n";
-    //   } else {
-    //     y << "M_matrix:\n";
-    //     for(int r=0;r<4;++r){
-    //       y << "  - [" << M(r,0) << ", " << M(r,1) << ", " << M(r,2) << ", " << M(r,3) << "]\n";
-    //     }
-    //   }
-
-    //   out_text = y.str();
-    // }
-
+    // Parse URDF to get robot name and joint objects
+    urdf::ModelInterfaceSharedPtr urdf_model = urdf::parseURDF(urdf_xml);
+    std::string robot_name = urdf_model ? urdf_model->name_ : std::string();
 
     // YAML-ish string (emits M as position + quaternion xyzw)
     std::string out_text;
@@ -223,6 +226,9 @@ private:
       std::ostringstream y;
       y.setf(std::ios::fixed); 
       y.precision(10);
+
+      // Add robot name if available
+      y << "robot_name: " << (robot_name.empty() ? "unknown" : robot_name) << "\n";
 
       // Add chain endpoints first
       y << "base_link: " << base_link << "\n";
@@ -249,6 +255,10 @@ private:
           << col(3) << ", " << col(4) << ", " << col(5) << "]\n";
       }
 
+      // Joint limits
+      y << extractJointLimits(urdf_model, space.joint_names);
+
+      // Home pose M
       if (home_pose_as_pos_quat) {
         Eigen::Vector3d Mp;
         Eigen::Vector4d Mq_wxyz;

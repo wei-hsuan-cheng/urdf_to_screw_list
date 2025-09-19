@@ -33,8 +33,8 @@ def screw_extractor_spawner(context: LaunchContext,
 
     return [Node(
         package="urdf_to_screw_list",
-        executable="urdf_to_screw_list_node",
-        name="urdf_to_screw_list_node",
+        executable="urdf_to_screw_list",
+        name="openarm_v10_screw_exporter",
         output="screen",
         parameters=[{
             "robot_description": robot_description,

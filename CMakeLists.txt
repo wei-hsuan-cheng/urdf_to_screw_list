@@ -20,11 +20,11 @@ include_directories(
   include
 )
 
-add_executable(urdf_to_screw_list_node
-  src/urdf_to_screw_list_node.cpp
+add_executable(urdf_to_screw_list
+  src/urdf_to_screw_list.cpp
 )
 
-ament_target_dependencies(urdf_to_screw_list_node
+ament_target_dependencies(urdf_to_screw_list
   rclcpp
   kdl_parser
   orocos_kdl
@@ -33,11 +33,11 @@ ament_target_dependencies(urdf_to_screw_list_node
   urdfdom_headers
 )
 
-target_link_libraries(urdf_to_screw_list_node
+target_link_libraries(urdf_to_screw_list
   Eigen3::Eigen
 )
 
-install(TARGETS urdf_to_screw_list_node
+install(TARGETS urdf_to_screw_list
   DESTINATION lib/${PROJECT_NAME})
 
 install(

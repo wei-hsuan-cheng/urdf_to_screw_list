@@ -48,7 +48,7 @@ def generate_launch_description():
     # --- One-shot screw export node ---
     screw_node = Node(
         package="urdf_to_screw_list",
-        executable="urdf_to_screw_list_node",
+        executable="urdf_to_screw_list",
         name="tm5_700_screw_exporter",
         output="screen",
         parameters=[{

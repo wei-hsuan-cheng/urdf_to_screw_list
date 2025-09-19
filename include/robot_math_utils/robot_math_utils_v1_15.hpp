@@ -3,13 +3,10 @@
 
 // Author: Wei-Hsuan Cheng, johnathancheng0125@gmail.com, https://github.com/wei-hsuan-cheng
 // GitHub repo: https://github.com/wei-hsuan-cheng/robot_math_utils
-// v1_14, last edit: 250901
+// v1_15, last edit: 250918
 //
 // Version history:
-//  - Added singularity check by manipulability index
-//  - Modify IKNum to use pos_so3 to drive the velocity toward desired configuration
-//  - Add pos_quat <-> pos_rot
-//  - Fix MatrixLog3() and MatrixLog6() potential numerical issue by using clamped ArcCos() function
+//  - Added attributes for ScrewList structure: robot_name, screw_representation, joint_names, base_frame, ee_frame, joint_limits
 
 
 #include <Eigen/Dense>
@@ -75,9 +72,15 @@ struct DHTable {
     std::vector<DHParams> joints;  // Store D-H parameters for each joint
     Eigen::MatrixXd dh_table;      // Store D-H table as a matrix
 
+    std::string robot_name = "arm";              // default: "arm"
+    std::string base_frame = "base";
+    std::string ee_frame   = "ee";
+    std::vector<std::string> joint_names;                 // default empty
+    MatrixXd joint_limits = MatrixXd::Zero(0,4); // n×4: [ll, ul, vel, eff]
+
     // Default constructor: initialize with an empty vector and an empty matrix.
     DHTable()
-      : joints(), dh_table(Eigen::MatrixXd::Zero(0, 4)) {}
+      : joints(), dh_table(MatrixXd::Zero(0, 4)) {}
 
     // Constructor to initialise DHTable from a vector of DHParams (joints)
     DHTable(const std::vector<DHParams>& joints)
@@ -88,6 +91,30 @@ struct DHTable {
             dh_table(i, 1) = joints[i].a;
             dh_table(i, 2) = joints[i].d;
             dh_table(i, 3) = joints[i].theta;
+        }
+    }
+
+    void setMeta(const std::string& robot_name_,
+                 const std::string& base_frame_,
+                 const std::string& ee_frame_,
+                 const std::vector<std::string>& joint_names_,
+                 const MatrixXd& joint_limits_) {
+        robot_name = robot_name_;
+        base_frame = base_frame_.empty() ? "base" : base_frame_;
+        ee_frame   = ee_frame_.empty()   ? "ee"   : ee_frame_;
+        // joint names: keep if same size, else generate defaults j1..jn
+        const int n = static_cast<int>(dh_table.rows());
+        if ((int)joint_names_.size() == n) {
+            joint_names = joint_names_;
+        } else {
+            joint_names.resize(n);
+            for (int i = 0; i < n; ++i) joint_names[i] = "j" + std::to_string(i+1);
+        }
+        // joint limits: accept n×4, else fallback to zeros
+        if (joint_limits_.rows() == n && joint_limits_.cols() == 4) {
+            joint_limits = joint_limits_;
+        } else {
+            joint_limits = MatrixXd::Zero(n, 4);
         }
     }
 
@@ -120,6 +147,32 @@ struct DHTable {
         std::cout << "***** " << title << std::string(inner - title.size(), ' ') << " *****\n";
         std::cout << "***** " << subtitle << std::string(inner - subtitle.size(), ' ') << " *****\n";
         std::cout << std::string(boxW, '*') << "\n";
+
+        // Metadata
+        if (!robot_name.empty()) {
+            std::cout << "robot_name: " << robot_name << "\n";
+        }
+        if (!base_frame.empty() || !ee_frame.empty()) {
+            std::cout << "base_frame: " << base_frame << "\nee_frame: " << ee_frame << "\n";
+        }
+        if (!joint_names.empty()) {
+            std::cout << "joints(n=" << joint_names.size() << "): ";
+            for (size_t i = 0; i < joint_names.size(); ++i) {
+                std::cout << (i ? ", " : "") << joint_names[i];
+            }
+            std::cout << "\n";
+        }
+
+        // Print joint limits
+        std::cout << "\n-- Joint limits [ll, ul, vel, eff] [rad, rad, rad/s, Nm] -->\n";
+        for (int i = 0; i < joint_names.size(); ++i) {
+        std::cout << "  " << joint_names[i] << ": ["
+                    << joint_limits(i,0) << ", "
+                    << joint_limits(i,1) << ", "
+                    << joint_limits(i,2) << ", "
+                    << joint_limits(i,3) << "]\n";
+        }
+        std::cout << std::endl;
 
         // Header separator
         std::cout << "|";
@@ -187,47 +240,123 @@ std::ostream& operator<<(std::ostream& os, const DHTable& table) {
 
 
 /**
- * @brief List of screw axes and home configuration for forward kinematics (FK) based on product of exponentials (PoE) method
+ * @brief List of screw axes and home configuration for FK/IK using PoE
  */
 struct ScrewList {
-    /// 6×n matrix, each column is an end-effector frame screw axis [v; w]
-    Eigen::MatrixXd screw_list;
-    /// Home pose of the end-effector
-    PosQuat M;
+    // ==== Existing fields (unchanged) ====
+    Eigen::MatrixXd screw_list;  // 6×n, each column [v; w]
+    PosQuat M;                   // home pose
 
-    /// Default constructor
+    // ==== New metadata attributes (safe defaults) ====
+    std::string robot_name = "arm";              // default: "arm"
+    enum class Rep { Space, Body };
+    Rep screw_representation = Rep::Body;        // default: body representation
+    std::vector<std::string> joint_names;        // default: empty
+    std::string base_frame = "base";        // default
+    std::string ee_frame   = "ee";          // default
+    Eigen::MatrixXd joint_limits = Eigen::MatrixXd::Zero(0,4); // n×4: [lower, upper, vel, effort]
+
+    // ==== Old constructors (kept, for backward compatibility) ====
     ScrewList()
       : screw_list(Eigen::MatrixXd::Zero(6, 0)),
         M(PosQuat()) {}
 
-    /**
-     * @brief Construct with screw axis matrix and home pose
-     * @param screw_list_ 6×n screw axis matrix
-     * @param M_          Home pose as PosQuat
-     */
     ScrewList(const Eigen::MatrixXd& screw_list_, const PosQuat& M_)
       : screw_list(screw_list_), M(M_) {}
 
+    // ==== New constructor with all metadata ====
+    ScrewList(const Eigen::MatrixXd& screw_list_, const PosQuat& M_,
+              const std::string& robot_name_,
+              Rep rep_,
+              const std::vector<std::string>& joint_names_,
+              const std::string& base_frame_,
+              const std::string& ee_frame_,
+              const Eigen::MatrixXd& joint_limits_)
+      : screw_list(screw_list_), M(M_),
+        robot_name(robot_name_), screw_representation(rep_),
+        joint_names(joint_names_), base_frame(base_frame_), ee_frame(ee_frame_) {
+        setJointLimits(joint_limits_);
+    }
+
+    // Parse "space"/"body" string to enum
+    static Rep ParseRep(const std::string& rep_str) {
+        std::string s = rep_str;
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        if (s == "space") return Rep::Space;
+        return Rep::Body;
+    }
+
+    // Safely set joint limits (resize fallback to zero matrix if mismatch)
+    void setJointLimits(const MatrixXd& jl) {
+        const int n = static_cast<int>(screw_list.cols());
+        if (jl.rows() == n && jl.cols() == 4) {
+            joint_limits = jl;
+        } else {
+            joint_limits = MatrixXd::Zero(n, 4); // fallback
+        }
+    }
+
+    // Fill metadata in one call (convenience for ROS2 node setup)
+    void setMeta(const std::string& robot_name_,
+                 Rep rep_,
+                 const std::vector<std::string>& joint_names_,
+                 const std::string& base_frame_,
+                 const std::string& ee_frame_,
+                 const MatrixXd& joint_limits_) {
+        robot_name = robot_name_;
+        screw_representation = rep_;
+        joint_names = joint_names_;
+        base_frame = base_frame_;
+        ee_frame   = ee_frame_;
+        setJointLimits(joint_limits_);
+    }
+
     /**
-     * @brief Print the screw axes with formatted columns and dividers
+     * @brief Print screw list with metadata and home pose
      */
     void PrintList() const {
         const int cols = screw_list.cols();
 
-        // Print title box
+        // Title box
         const int width = 12;
-        const std::string& title = "Screw list (end-effector frame screw axes)";
-        const std::string& subtitle = "S_e,i = [v, w]^T (se(3) or R^6 vector), i = 1, ..., n";
-        int inner = std::max(title.size(), subtitle.size());
-        int boxW = inner + 12;
+        const std::string title    = "Screw list (end-effector frame screw axes)";
+        const std::string subtitle = "S_e,i = [v, w]^T, i = 1...n";
+        const int inner = static_cast<int>(std::max(title.size(), subtitle.size()));
+        const int boxW  = inner + 12;
 
-        std::cout << "\n";
-        std::cout << std::string(boxW, '*') << "\n";
-        std::cout << "***** " << title << std::string(inner - title.size(), ' ') << " *****\n";
+        std::cout << "\n" << std::string(boxW, '*') << "\n";
+        std::cout << "***** " << title    << std::string(inner - title.size(),    ' ') << " *****\n";
         std::cout << "***** " << subtitle << std::string(inner - subtitle.size(), ' ') << " *****\n";
         std::cout << std::string(boxW, '*') << "\n";
 
-        // Header separator
+        // Metadata
+        if (!robot_name.empty()) {
+            std::cout << "robot_name: " << robot_name << "\n";
+        }
+        std::cout << "representation: " << (screw_representation == Rep::Body ? "body" : "space") << "\n";
+        if (!base_frame.empty() || !ee_frame.empty()) {
+            std::cout << "base_frame: " << base_frame << "\nee_frame: " << ee_frame << "\n";
+        }
+        if (!joint_names.empty()) {
+            std::cout << "joints(n=" << joint_names.size() << "): ";
+            for (size_t i = 0; i < joint_names.size(); ++i) {
+                std::cout << (i ? ", " : "") << joint_names[i];
+            }
+            std::cout << "\n";
+        }
+
+        // Print joint limits
+        std::cout << "\n-- Joint limits [ll, ul, vel, eff] [rad, rad, rad/s, Nm] -->\n";
+        for (int i = 0; i < joint_names.size(); ++i) {
+        std::cout << "  " << joint_names[i] << ": ["
+                    << joint_limits(i,0) << ", "
+                    << joint_limits(i,1) << ", "
+                    << joint_limits(i,2) << ", "
+                    << joint_limits(i,3) << "]\n";
+        }
+        std::cout << std::endl;
+
+        // Table header separator
         std::cout << "|";
         for (int i = 0; i < cols; ++i) std::cout << std::string(width, '-') << "|";
         std::cout << "\n";
@@ -262,9 +391,18 @@ struct ScrewList {
         for (int i = 0; i < cols; ++i) std::cout << std::string(width, '-') << "|";
         std::cout << "\n";
 
-        std::cout << std::fixed; // reset format
+        // Print home pose
+        std::cout << "\n-- Home pose M [m, quat_wxyz] -->\n"
+                  << M.pos.x()   << ", "
+                  << M.pos.y()   << ", "
+                  << M.pos.z()   << ", "
+                  << M.quat.w()  << ", "
+                  << M.quat.x()  << ", "
+                  << M.quat.y()  << ", "
+                  << M.quat.z()  << "\n";
     }
 };
+
 
 
 
@@ -1140,7 +1278,45 @@ public:
             screw_list.col(i) = S;
         }
 
-        return ScrewList(screw_list, zero_config_pose);
+        // ---- construct ScrewList (keeps old constructor) ----
+        ScrewList out(screw_list, zero_config_pose);
+
+        // ---- inherit metadata from DHTable (safe defaults) ----
+        // joint names: use table’s if size matches; otherwise j1..jn
+        std::vector<std::string> jnames;
+        if (table.joint_names.size() == n) {
+            jnames = table.joint_names;
+        } else {
+            jnames.resize(n);
+            for (size_t i = 0; i < n; ++i) jnames[i] = "j" + std::to_string(i + 1);
+        }
+
+        // joint limits: use n×4 from table; otherwise zeros
+        MatrixXd jl;
+        if (table.joint_limits.rows() == static_cast<int>(n) &&
+            table.joint_limits.cols() == 4) {
+            jl = table.joint_limits;
+        } else {
+            jl = MatrixXd::Zero(static_cast<int>(n), 4);
+        }
+
+        // representation hint: keep body as default (no behavioral change)
+        const auto rep = ScrewList::Rep::Body;
+
+        // apply metadata to ScrewList (non-throwing)
+        out.setMeta(
+            table.robot_name,      // robot_name ("" OK)
+            rep,                   // representation (Body default)
+            jnames,                // joint_names (size-safe)
+            table.base_frame,      // base frame ("base" default from DHTable)
+            table.ee_frame,        // ee frame ("ee" default from DHTable)
+            jl                     // joint limits (n×4 or zeros)
+        );
+
+        return out;
+
+        // return ScrewList(screw_list, zero_config_pose);
+
     }
 
 

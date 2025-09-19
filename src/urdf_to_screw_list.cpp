@@ -236,11 +236,11 @@ public:
     this->declare_parameter<bool>("verbose", true);
     this->declare_parameter<bool>("home_pose_as_pos_quat", true);
 
-    run_once();
+    urdfToScrewList();
   }
 
 private:
-  void run_once(){
+  void urdfToScrewList(){
     const auto base_link       = this->get_parameter("base_link").as_string();
     const auto ee_link         = this->get_parameter("ee_link").as_string();
     const auto output_path     = this->get_parameter("output_path").as_string();
@@ -259,7 +259,7 @@ private:
       urdf_xml = readFileToString(urdf_path);
     }
 
-    // Build SPACE screw list (+ metadata)
+    // Build screw_list
     ScrewList screws_ = make_screw_list_from_urdf_string(urdf_xml, base_link, ee_link, use_body);
 
     // ---- Print to console ----

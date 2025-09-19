@@ -213,7 +213,7 @@ static ScrewList make_screw_list_from_urdf_string(
   out.setMeta(
       urdf_model ? urdf_model->name_ : std::string("arm"), // robot_name
       frame_label == "space" ? ScrewList::Rep::Space : ScrewList::Rep::Body, // representation flag
-      joint_names,                                      // joint_names
+      joint_names,                                    // joint_names
       base_link,                                      // base_frame
       ee_link,                                        // ee_frame
       jl                                              // joint_limits
@@ -231,7 +231,7 @@ public:
     this->declare_parameter<std::string>("robot_description", "");
     this->declare_parameter<std::string>("urdf_path", "");         // optional fallback
     this->declare_parameter<std::string>("output_path", "");       // optional file
-    this->declare_parameter<std::string>("output_format", "yaml"); // yaml|txt|cpp (yaml used)
+    this->declare_parameter<std::string>("output_format", "yaml"); // yaml only for now
     this->declare_parameter<bool>("use_body_frame", false);        // false = space S, true = body B
     this->declare_parameter<bool>("verbose", true);
     this->declare_parameter<bool>("home_pose_as_pos_quat", true);
@@ -282,7 +282,7 @@ private:
       y.setf(std::ios::fixed); 
       y.precision(10);
 
-      // Robot name (from URDF or meta)
+      // Robot name
       y << "robot_name: " << screws_.robot_name << "\n";
 
       // Chain endpoints

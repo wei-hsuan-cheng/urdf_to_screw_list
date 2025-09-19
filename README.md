@@ -149,5 +149,17 @@ joint_limits:
   joint_6: { lower: -4.7123889804, upper: 4.7123889804, velocity: 3.9269908170, effort: 43.0000000000 }
 M_position: [0.0000002863, -0.2354500000, 0.8917000370]
 M_quaternion_wxyz: [0.7071070123, 0.7071065501, 0.0000001155, 0.0000001155]
-
 ```
+
+You can then import your own robot descriptions and convert into screw lists!
+
+## Acknowledgements
+
+- **Robot Math Utils**: Some utilities from [Robot Math Utils](https://github.com/wei-hsuan-cheng/robot_math_utils) are used.
+- **Eigen Library**: This library heavily relies on the Eigen library for linear algebra operations.
+
+## Contact
+
+- **Author**: Wei-Hsuan Cheng [(johnathancheng0125@gmail.com)](mailto:johnathancheng0125@gmail.com)
+- **Homepage**: [wei-hsuan-cheng](https://wei-hsuan-cheng.github.io)
+- **GitHub**: [wei-hsuan-cheng](https://github.com/wei-hsuan-cheng)

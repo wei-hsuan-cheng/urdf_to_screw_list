@@ -16,7 +16,7 @@
 using RM = RMUtils;
 
 // ---------- small helpers ----------
-static Matrix4d kdlFrameToEig(const KDL::Frame& F){
+static Matrix4d kdlFrameToTMat(const KDL::Frame& F){
   Matrix4d T = Matrix4d::Identity();
   for(int r=0;r<3;++r)
     for(int c=0;c<3;++c)
@@ -197,7 +197,7 @@ static ScrewList make_screw_list_from_urdf_string(
   }
 
   // Home pose
-  Matrix4d M_b_e = kdlFrameToEig(T_base_prev);
+  Matrix4d M_b_e = kdlFrameToTMat(T_base_prev);
 
   // Select screw representation (space or body)
   MatrixXd S_or_B = S; // space-screw by default; body-screw if use_body is true
